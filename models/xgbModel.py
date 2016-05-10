@@ -5,12 +5,14 @@ import datetime as dt
 from sklearn.cross_validation import train_test_split, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.metrics import log_loss
-from sklearn.grid_search import GridSearchCV
 from xgboost.sklearn import XGBClassifier
+
+from hyperopt import hp, fmin, tpe, hp, STATUS_OK, Trials
 
 ID_COL = 't_id'
 LABEL_COL = 'probability'
 
+# TODO use argparse..
 TRAIN_FILENAME = '../data/numerai_training_data.csv'
 TEST_FILENAME = '../data/numerai_tournament_data.csv'
 
@@ -25,7 +27,6 @@ features = trainDf.drop("target", axis=1)
 labels = trainDf.target
 
 # Feature engineering
-
 poly = PolynomialFeatures(degree=2, include_bias=False)
 features = poly.fit_transform(features)
 
@@ -37,10 +38,47 @@ features = scaler.fit_transform(features)
 xTrain, xValid, yTrain, yValid = train_test_split(
     features, labels, test_size=0.2, random_state=37)
 
-stratifiedKFold = StratifiedKFold(yTrain, n_folds=5, shuffle=True)
-
 # Default XGBClassifier gets logloss 0.694..at least I'm not last.
-clf = XGBClassifier(seed=37, n_estimators=1000)
+
+# Hyperparameter optimisation
+
+
+def objective(space):
+
+    clf = XGBClassifier(n_estimators=int(space['n_estimators']),
+                        objective='binary:logistic',
+                        seed=37,
+                        learning_rate=space['learning_rate'],
+                        max_depth=space['max_depth'],
+                        min_child_weight=space['min_child_weight'],
+                        colsample_bytree=space['colsample_bytree'],
+                        subsample=space['subsample'])
+
+    clf.fit(xTrain, yTrain, eval_metric="logloss")
+    pred = clf.predict_proba(xValid)[:, 1]
+    loss = log_loss(yValid, pred)
+    return{'loss': loss, 'status': STATUS_OK}
+
+
+space = {
+    'n_estimators': hp.quniform('n_estimators', 100, 300, 100),
+    'learning_rate': hp.quniform('learning_rate', 0.02, 0.05, 0.01),
+    'max_depth': hp.quniform('max_depth', 3, 10, 1),
+    'min_child_weight': hp.quniform('min_child_weight', 3, 8, 1),
+    'subsample': hp.quniform('subsample', 0.5, 1, 0.05),
+    'colsample_bytree': hp.quniform('colsample_bytree', 0.5, 1, 0.05),
+}
+
+trials = Trials()
+bestParams = fmin(fn=objective,
+                  space=space,
+                  algo=tpe.suggest,
+                  max_evals=100,
+                  trials=trials)
+
+
+clf = XGBClassifier(**bestParams)
+clf.seed = 37
 
 clf.fit(xTrain, yTrain, eval_metric='logloss')
 
