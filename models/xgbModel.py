@@ -1,3 +1,6 @@
+from __future__ import division
+
+import os
 import numpy as np
 import pandas as pd
 import datetime as dt
@@ -12,9 +15,10 @@ from hyperopt import hp, fmin, tpe, hp, STATUS_OK, Trials
 ID_COL = 't_id'
 LABEL_COL = 'probability'
 
-# TODO use argparse..
-TRAIN_FILENAME = '../data/numerai_training_data.csv'
-TEST_FILENAME = '../data/numerai_tournament_data.csv'
+os.chdir(os.path.expanduser('~/code/python/numerai'))
+
+TRAIN_FILENAME = 'data/numerai_training_data.csv'
+TEST_FILENAME = 'data/numerai_tournament_data.csv'
 
 trainDf = pd.read_csv(TRAIN_FILENAME)
 
